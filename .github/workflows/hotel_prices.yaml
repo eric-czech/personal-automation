@@ -1,27 +1,59 @@
-name: py
+name: Hotel Price Tracker
 
-
-on: [push]
-# on:
-#   schedule:
-#     - cron: "0 18 * * *" # run every day at 18:00 UTC
+on:
+  schedule:
+    - cron: "0 */3 * * *" # "At minute 0 past every 3rd hour." (https://crontab.guru/)
 
 jobs:
-  build:
+  execute:
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
     runs-on: ubuntu-latest
-
     steps:
-      - name: checkout repo
-        uses: actions/checkout@v2 
-      - name: setup python
-        uses: actions/setup-python@v2
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: GCP Auth
+        uses: google-github-actions/auth@v0.4.0
         with:
-          python-version: 3.10
-          - name: Install dependencies
-          run: |
-            python -m pip install --upgrade pip
-            pip install flake8 pytest fire
-            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: execute script # run file
+          workload_identity_provider: '${{ vars.GCP_WIP }}'
+          service_account: '${{ vars.GCP_SA }}'
+      - name: Setup python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Installed package list
+        run: apt list --installed
+      - name: Remove Chrome
+        run: sudo apt purge google-chrome-stable
+      - name: Remove default Chromium
+        run: sudo apt purge chromium-browser
+      - name: Install newer Chromium
+        run: sudo apt install -y chromium-browser
+      - name: Install Python dependencies
         run: |
-          python hotel-prices/main.py
+            python -m pip install --upgrade pip
+            pip install -r hotel_prices/requirements.txt
+      - name: Show Python dependencies
+        run: |
+            pip freeze
+      - id: output_path
+        name: Set output path
+        run: echo "GCS_RAW_PATH='gs://${{ vars.GCS_BUCKET }}/personal-automation/hotel_prices/raw/seven-stars'" >> "$GITHUB_OUTPUT" \
+          && echo "GCS_AGG_PATH='gs://${{ vars.GCS_BUCKET }}/personal-automation/hotel_prices/parquet'" >> "$GITHUB_OUTPUT"
+      - name: Execute collection
+        run: |
+          python hotel_prices/main.py collect \
+          --output-path=${{ steps.output_path.outputs.GCS_RAW_PATH }} \
+          --start-date="04/01/2024" --stop-date="04/08/2024"
+      - name: Execute aggregation
+        run: |
+          python hotel_prices/main.py aggregate \
+          --input-path=${{ steps.output_path.outputs.GCS_RAW_PATH }} \
+          --output-path=${{ steps.output_path.outputs.GCS_AGG_PATH }}
+      - name: Execute analysis
+        run: |
+          python hotel_prices/main.py analyze \
+          --input-path=${{ steps.output_path.outputs.GCS_AGG_PATH }} \
+          --webook-url=${{ secrets.SLACK_WEBHOOK_URL }}
