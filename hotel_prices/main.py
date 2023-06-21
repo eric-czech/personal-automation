@@ -3,6 +3,7 @@ import logging
 import re
 import time
 from typing import Any
+from typing import Sequence
 from urllib.parse import quote
 
 import fire
@@ -138,7 +139,14 @@ class HotelPrices:
         df.to_parquet(path, index=False)
         logger.info(f"Data written to '{path}'")
 
-    def analyze(self, input_path: str, webook_url: str) -> None:
+    def analyze(
+        self,
+        input_path: str,
+        webook_url: str,
+        member_ids: Sequence[str] | str | None = None,
+    ) -> None:
+        if member_ids is not None and isinstance(member_ids, str):
+            member_ids = member_ids.split(",")
         df = pd.read_parquet(input_path)
         logger.info(f"Price data: {df}")
         df.info()
@@ -167,7 +175,7 @@ class HotelPrices:
                 all_prices=("price", "unique"),
             )
             .pipe(lambda df: df[df["n_prices"] > 1])
-            # .pipe(lambda df: df[df['min_price_date'] == df['max_date']])
+            .pipe(lambda df: df[df["min_price_date"] == df["max_date"]])
             .reset_index()
         )
         if len(price_alerts) > 0:
@@ -191,9 +199,14 @@ class HotelPrices:
                 )
                 .to_markdown(index=False, tablefmt="github")
             )
+            mentions = (
+                " ".join([f"<@{id}>" for id in member_ids]) + "\n\n"
+                if member_ids
+                else ""
+            )
             message = (
-                "Found new low prices on Seven Stars rooms!  "
-                "Here the rooms and check-in/check-out periods with lower prices than those ever seen before:\n"
+                f"{mentions}Found new low prices on Seven Stars rooms!  "
+                "Here are the rooms and check-in/check-out dates with lower prices than those ever seen before:\n"
                 f"```\n{table}\n```\n\n"
                 f"For more details see {LOOKER_REPORT_URL}."
             )

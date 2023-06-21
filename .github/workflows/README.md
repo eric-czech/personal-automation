@@ -1,6 +1,8 @@
-# Configuration
+# Workflow Configuration
 
-To enable GCP access:
+## GCP 
+
+To configure GCP auth for this workflow:
 
 - Create a service account
     - https://cloud.google.com/iam/docs/service-accounts-create#iam-service-accounts-create-console
@@ -28,5 +30,5 @@ To enable GCP access:
   with:
     # Get this from https://console.cloud.google.com/iam-admin/workload-identity-pools/pool/github-wif-pool/provider/github
     workload_identity_provider: 'projects/413156992799/locations/global/workloadIdentityPools/github-wif-pool/providers/github'
-    service_account: 'gha-workflow@personal-analysis-388903.iam.gserviceaccount.com'
+    service_account: 'gha-workflow@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 ```

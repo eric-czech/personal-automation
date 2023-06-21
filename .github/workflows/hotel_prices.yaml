@@ -18,7 +18,7 @@ jobs:
         uses: google-github-actions/auth@v0.4.0
         with:
           workload_identity_provider: '${{ vars.GCP_WIP }}'
-          service_account: '${{ vars.GCP_SA }}'
+          service_account: '${{ secrets.GCP_SA }}'
       - name: Setup python
         uses: actions/setup-python@v4
         with:
@@ -56,4 +56,5 @@ jobs:
         run: |
           python hotel_prices/main.py analyze \
           --input-path=${{ steps.output_path.outputs.GCS_AGG_PATH }} \
-          --webook-url=${{ secrets.SLACK_WEBHOOK_URL }}
+          --webook-url=${{ secrets.SLACK_WEBHOOK_URL }} \
+          --member-ids='${{ secrets.SLACK_MEMBER_IDS }}'
