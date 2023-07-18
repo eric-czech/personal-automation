@@ -92,6 +92,8 @@ class HotelPrices:
         stop_date: str = "04/08/2024",
     ) -> None:
         prices = self.get_prices(start_date=start_date, stop_date=stop_date)
+        if not prices:
+            raise AssertionError('No price data found')
         timestamp = int(time.time())
         results = dict(
             prices=prices,
@@ -117,22 +119,30 @@ class HotelPrices:
             logger.info(f"Processing path '{path}'")
             # Do not use `read_text` or `read`; for some reason they
             # truncate content regardless of block size/length
-            data = json.loads(fs.cat_file(path).decode("utf-8"))
-            dfs.append(
+            data = []
+            for line in fs.cat_file(path).decode("utf-8").split("\n"):
+                data.append(json.loads(line))
+            df = (
                 pd.DataFrame(
                     [
                         {
-                            **{k: v for k, v in data.items() if k != "prices"},
+                            **{k: v for k, v in record.items() if k != "prices"},
                             **dict(room_name=row["room_name"], price=price),
                         }
-                        for row in data["prices"]
+                        for record in data
+                        for row in record["prices"]
                         for price in row["room_prices"]
                     ]
-                ).assign(
+                )
+            )
+            if len(df) == 0:
+                raise AssertionError(f'No data found for path: {path}; data=\n{data}')
+            dfs.append(
+                df.assign(
                     collection_date=lambda df: pd.to_datetime(df["timestamp"], unit="s")
                 )
             )
-        df = pd.concat(dfs, axis="rows", ignore_index=True)
+        df = pd.concat(dfs, axis=0, ignore_index=True)
         logger.info(f"Aggregated data: {df}")
         df.info()
         path = output_path + "/data.parquet"
@@ -216,6 +226,39 @@ class HotelPrices:
         else:
             logger.info("No price alerts found")
 
+    def run_compaction(
+        self,
+        input_path: str,
+    ) -> None:
+        fs = gcsfs.GCSFileSystem(token="google_default")
+        paths = []
+        for path in fs.glob(input_path + "/*.json"):
+            filename = path.split('/')[-1]
+            if re.match(r'data_\d+\.json', filename):
+                lines = fs.cat_file(path).decode("utf-8").split("\n")
+                paths.append(dict(
+                    path=path, 
+                    filename=filename, 
+                    timestamp=int(filename.split('_')[1].split('.')[0]),
+                    lines=lines
+                ))
+        if len(paths) == 0:
+            logger.info("Found no paths to combine")
+            return
+        logger.info(f"Found {len(paths)} paths to combine")
+        min_timestamp = min([p['timestamp'] for p in paths])
+        max_timestamp = max([p['timestamp'] for p in paths])
+        combined_path = input_path.strip().rstrip('/') + f'/data_{min_timestamp}_{max_timestamp}.json'
+        content = "\n".join([line for p in paths for line in p['lines']])
+        logger.debug(f"Content=\n{content}")
+        logger.info(f"Writing combined data to path {combined_path}")
+        fs.write_text(combined_path, content, encoding='utf-8')
+        logger.info("Done writing combined data")
+        logger.info("Deleting old paths ...")
+        for path in paths:
+            logger.info(f"Deleting path {path['path']}")
+            fs.delete(path['path'])
+        logger.info("Compaction complete")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
