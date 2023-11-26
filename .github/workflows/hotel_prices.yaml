@@ -1,9 +1,8 @@
 name: Hotel Price Tracker
 
-on: [push]
-# on:
-#   schedule:
-#     - cron: "0 */12 * * *" # "At minute 0 past every 12th hour." (https://crontab.guru/)
+on:
+  schedule:
+    - cron: "0 */12 * * *" # "At minute 0 past every 12th hour." (https://crontab.guru/)
 
 jobs:
   execute:
@@ -28,10 +27,6 @@ jobs:
         run: |
           sudo apt update
           sudo apt upgrade
-      # - name: Remove Chrome
-      #   run: sudo apt purge google-chrome-stable
-      # - name: Remove default Chromium
-      #   run: sudo apt purge chromium-browser
       - name: Install newer Chromium
         run: sudo apt install -y chromium-browser
       - name: Installed package list
